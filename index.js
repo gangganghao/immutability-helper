@@ -98,6 +98,13 @@ var defaultCommands = {
     return value.length ? value.concat(nextObject) : nextObject;
   },
   $splice: function(value, nextObject, spec, originalObject) {
+    //Pseudo array transform to array
+    if(nextObject && typeof nextObject === 'object' && nextObject.constructor.toString().indexOf('Array')>-1) {
+      nextObject = Array.prototype.slice.call(nextObject);
+    }
+    if(originalObject && typeof originalObject === 'object' && originalObject.constructor.toString().indexOf('Array')>-1) {
+      originalObject = Array.prototype.slice.call(originalObject);
+    }
     invariantSplices(nextObject, spec);
     value.forEach(function(args) {
       invariantSplice(args);
