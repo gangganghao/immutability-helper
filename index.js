@@ -30,8 +30,8 @@ function copy(object) {
   } else if (type(object) === 'Set') {
     return new Set(object)
   } else if (object && typeof object === 'object') {
-    var prototype = object.constructor && object.constructor.prototype
-    return assign(Object.create(prototype || null), object);
+    var prototype = Object.getPrototypeOf(object);
+    return assign(Object.create(prototype), object);
   } else {
     return object;
   }
@@ -47,6 +47,10 @@ function newContext() {
   return update;
 
   function update(object, spec) {
+    if (typeof spec === 'function') {
+      spec = { $apply: spec };
+    }
+
     if (!(Array.isArray(object) && Array.isArray(spec))) {
       invariant(
         !Array.isArray(spec),
@@ -74,12 +78,23 @@ function newContext() {
           nextObject = object;
         }
       } else {
-        var nextValueForKey = update(object[key], spec[key]);
-        if (!update.isEquals(nextValueForKey, nextObject[key]) || typeof nextValueForKey === 'undefined' && !hasOwnProperty.call(object, key)) {
+        var nextValueForKey =
+          type(object) === 'Map'
+            ? update(object.get(key), spec[key])
+            : update(object[key], spec[key]);
+        var nextObjectValue =
+          type(nextObject) === 'Map'
+              ? nextObject.get(key)
+              : nextObject[key];
+        if (!update.isEquals(nextValueForKey, nextObjectValue) || typeof nextValueForKey === 'undefined' && !hasOwnProperty.call(object, key)) {
           if (nextObject === object) {
             nextObject = copy(object);
           }
-          nextObject[key] = nextValueForKey;
+          if (type(nextObject) === 'Map') {
+            nextObject.set(key, nextValueForKey);
+          } else {
+            nextObject[key] = nextValueForKey;
+          }
         }
       }
     })
@@ -180,7 +195,10 @@ var defaultCommands = {
   }
 };
 
-module.exports = newContext();
+var contextForExport = newContext();
+
+module.exports = contextForExport;
+module.exports.default = contextForExport;
 module.exports.newContext = newContext;
 
 // invariants

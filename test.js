@@ -2,6 +2,11 @@ var update = require('./');
 var expect = require('expect');
 
 describe('update', function() {
+  describe('default export', function() {
+    it('should equal update', function() {
+      expect(update.default).toEqual(update);
+    });
+  });
 
   describe('$push', function() {
     it('pushes', function() {
@@ -265,6 +270,32 @@ describe('update', function() {
     });
   });
 
+  describe('direct apply', function() {
+    var applier = function(node) {
+      return {v: node.v * 2};
+    };
+    it('applies', function() {
+      var doubler = function(value) {
+        return value * 2;
+      };
+      expect(update({v: 2}, applier)).toEqual({v: 4});
+      expect(update(2, doubler)).toEqual(4);
+    });
+    it('does not mutate the original object', function() {
+      var obj = {v: 2};
+      update(obj, applier);
+      expect(obj).toEqual({v: 2});
+    });
+    it('keeps reference equality when possible', function() {
+      var original = {a: {b: {}}};
+      function identity(val) {
+        return val;
+      }
+      expect(update(original, {a: identity})).toBe(original);
+      expect(update(original, {a: applier})).toNotBe(original);
+    });
+  });
+
   describe('deep update', function() {
     it('works', function() {
       expect(update({
@@ -276,6 +307,7 @@ describe('update', function() {
           h: [3],
           i: {j: 'k'},
           l: 4,
+          m: 'n',
         },
       }, {
         c: {
@@ -285,6 +317,7 @@ describe('update', function() {
           h: {$splice: [[0, 1, 7]]},
           i: {$merge: {n: 'o'}},
           l: {$apply: function(x) { return x * 2 }},
+          m: function(x) { return x + x },
         },
       })).toEqual({
         a: 'b',
@@ -295,6 +328,7 @@ describe('update', function() {
           h: [7],
           i: {j: 'k', n: 'o'},
           l: 8,
+          m: 'nn',
         },
       });
     });
@@ -472,6 +506,12 @@ describe('update', function() {
     expect(update.bind(null, obj, {$merge: {a: 'b'}})).toNotThrow()
   });
 
+  it('supports objects with prototypes', function() {
+    var proto = { a: 'Proto' };
+    var obj = Object.create(proto);
+    expect(update(obj, { $merge: { b: 'Obj' } }).a).toEqual('Proto');
+  });
+
   it('supports an escape hatch for isEquals', function() {
     myUpdate.isEquals = function(a, b) {
       return JSON.stringify(a) === JSON.stringify(b);
@@ -485,6 +525,15 @@ describe('update', function() {
     expect(a).toBe(d)
   });
 
+  it('supports an escape hatch for isEqual for shallow direct apply', function() {
+    myUpdate.isEquals = function(a, b) {
+      return JSON.stringify(a) === JSON.stringify(b);
+    };
+    var a = { b: 1 };
+    var b = myUpdate(a, function() { return { b: 1 }; });
+    expect(a).toBe(b);
+  });
+
   it('does not lose non integer keys of an array', function() {
     var state = a = { items: [
       { name: 'Superman', strength: 1000 },
@@ -493,6 +542,47 @@ describe('update', function() {
     state.items.top = 0
     var state2 = update(state, { items: { 1: { strength: { $set: 3 } } } });
     expect(state2.items.top).toBe(0)
+  });
+
+  it('supports Maps', function() {
+    var state = new Map([
+      ['mapKey', 'mapValue']
+    ]);
+
+    var updatedState = update(state, {
+      ['mapKey']: {$set: 'updatedMapValue' }
+    });
+
+    expect(updatedState).toEqual(
+      new Map([
+        ['mapKey', 'updatedMapValue']
+      ])
+    );
+  });
+
+  it('supports nested objects inside Maps', function () {
+    var state = new Map([
+      ['mapKey', { banana: 'yellow', apple: ['red'], blueberry: 'purple' }]
+    ]);
+
+    var updatedState = update(state, {
+      ['mapKey']: { apple: { $set: ['green', 'red'] } }
+    });
+
+    expect(updatedState).toEqual(
+      new Map([
+        [
+          'mapKey',
+          { banana: 'yellow', apple: ['green', 'red'], blueberry: 'purple' }
+        ]
+      ])
+    );
+  });
+
+  it('supports Maps and keeps reference equality when possible', function() {
+    var original = new Map([['a', { b: 1 }]]);
+    expect(update(original, { a: { $merge: {} } })).toBe(original);
+    expect(update(original, { a: { $merge: { c: 2 } } })).toNotBe(original);
   });
 
 });
